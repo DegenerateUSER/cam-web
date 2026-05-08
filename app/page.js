@@ -11,7 +11,7 @@ export default function Home() {
           <div className="header-title">Live Surveillance</div>
         </div>
         <div className="header-right">
-          <div className="server-indicator" id="serverBadge"></div>
+          {/*<div className="server-indicator" id="serverBadge"></div>*/}
           <div className="header-time" id="headerTime"></div>
         </div>
       </div>
