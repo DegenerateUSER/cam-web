@@ -1,5 +1,6 @@
 const DEFAULT_SERVER =
   document.getElementById("appConfig")?.dataset.defaultServer?.replace(/\/+$/, "") || "http://localhost:1984";
+const DEFAULT_CAMERA_CONFIG = "cam1:CAM 01,cam2:CAM 02,cam3:CAM 03,cam4:CAM 04";
 
 function getServerUrl() {
   return DEFAULT_SERVER;
@@ -28,10 +29,40 @@ if (document.readyState === "loading") {
   updateServerBadge();
 }
 
-const CAMERAS = [
-  { id: "101", name: "CAM 101" },
-  { id: "201", name: "CAM 201" },
-];
+function getDefaultCameraName(id) {
+  const camMatch = /^cam(\d+)$/i.exec(id);
+  if (camMatch) {
+    return `CAM ${camMatch[1].padStart(2, "0")}`;
+  }
+  return `CAM ${id.toUpperCase()}`;
+}
+
+function getCameras() {
+  const rawCameraConfig = document.getElementById("appConfig")?.dataset.cameras || DEFAULT_CAMERA_CONFIG;
+  const parsedCameras = rawCameraConfig
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [idPart, ...nameParts] = entry.split(":");
+      const id = idPart?.trim();
+      if (!id) return null;
+      const name = nameParts.join(":").trim() || getDefaultCameraName(id);
+      return { id, name };
+    })
+    .filter(Boolean);
+
+  if (parsedCameras.length > 0) return parsedCameras;
+
+  return [
+    { id: "cam1", name: "CAM 01" },
+    { id: "cam2", name: "CAM 02" },
+    { id: "cam3", name: "CAM 03" },
+    { id: "cam4", name: "CAM 04" },
+  ];
+}
+
+const CAMERAS = getCameras();
 const WEBRTC_TIMEOUT = 8000;
 
 const state = {};
@@ -64,6 +95,10 @@ if (document.readyState === "loading") {
 
 const grid = document.getElementById("grid");
 if (grid) {
+  const rowCount = Math.max(1, Math.ceil(CAMERAS.length / 2));
+  grid.style.gridTemplateColumns = CAMERAS.length === 1 ? "1fr" : "1fr 1fr";
+  grid.style.gridTemplateRows = `repeat(${rowCount}, minmax(0, 1fr))`;
+
   CAMERAS.forEach((cam) => {
     state[cam.id] = { method: null, status: "idle", pc: null, lastFrame: null };
     const tile = document.createElement("div");
@@ -201,7 +236,7 @@ async function tryWebRTC(camId) {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      const resp = await fetch(`${getHttpBase()}/api/webrtc?src=${camId}`, {
+      const resp = await fetch(`/api/webrtc?src=${encodeURIComponent(camId)}`, {
         method: "POST",
         headers: { "Content-Type": "application/sdp" },
         body: pc.localDescription.sdp,
@@ -242,7 +277,7 @@ async function tryMSE(camId) {
       }
     }, WEBRTC_TIMEOUT);
 
-    vid.src = `${getHttpBase()}/api/stream.mp4?src=${camId}`;
+    vid.src = `/api/stream.mp4?src=${encodeURIComponent(camId)}`;
     vid.addEventListener("loadeddata", function onLoad() {
       vid.removeEventListener("loadeddata", onLoad);
       updateFrameTime(camId);
@@ -280,7 +315,7 @@ async function tryMJPEG(camId) {
 
     const img = document.createElement("img");
     img.className = "mjpeg";
-    img.src = `${getHttpBase()}/api/stream.mjpeg?src=${camId}`;
+    img.src = `/api/stream.mjpeg?src=${encodeURIComponent(camId)}`;
     img.onload = () => {
       updateFrameTime(camId);
       if (!settled) {

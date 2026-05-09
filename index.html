@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Surveillance</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0f;--surface:#12121a;--surface2:#1a1a26;--border:#2a2a3a;
+  --text:#e4e4ef;--text-muted:#8888a0;--accent:#ef4444;--accent-glow:rgba(239,68,68,.25);
+  --green:#22c55e;--yellow:#eab308;--blue:#3b82f6;
+}
+html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+
+/* Header */
+.header{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);height:56px;position:relative;z-index:10}
+.header-left{display:flex;align-items:center;gap:14px}
+.header-right{display:flex;align-items:center;gap:16px}
+.rec-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent-glow);animation:blink 1.2s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.header-title{font-size:18px;font-weight:700;letter-spacing:3px;text-transform:uppercase}
+.header-time{font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--text-muted);letter-spacing:1px}
+.settings-btn{background:none;border:none;color:var(--text-muted);cursor:pointer;padding:6px;border-radius:6px;transition:all .2s;display:flex;align-items:center}
+.settings-btn:hover{color:var(--text);background:var(--surface2)}
+.server-indicator{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--green);background:rgba(34,197,94,.1);padding:3px 10px;border-radius:4px;border:1px solid rgba(34,197,94,.2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Settings Modal */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-backdrop.active{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px;width:90%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.modal h2{font-size:16px;font-weight:700;letter-spacing:2px;margin-bottom:6px}
+.modal p{font-size:12px;color:var(--text-muted);margin-bottom:20px;line-height:1.5}
+.modal label{font-size:12px;font-weight:600;letter-spacing:1px;color:var(--text-muted);display:block;margin-bottom:6px}
+.modal input{width:100%;padding:10px 14px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;outline:none;transition:border-color .2s}
+.modal input:focus{border-color:var(--blue)}
+.modal-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end}
+.modal-actions button{font-family:'Inter',sans-serif;font-size:12px;font-weight:600;padding:8px 20px;border-radius:6px;cursor:pointer;letter-spacing:.5px;transition:all .2s}
+.btn-primary{border:none;background:var(--blue);color:#fff}
+.btn-primary:hover{background:#2563eb}
+.btn-secondary{border:1px solid var(--border);background:var(--surface2);color:var(--text)}
+.btn-secondary:hover{background:#252538}
+.modal-hint{font-size:11px;color:var(--text-muted);margin-top:8px;line-height:1.5}
+.modal-hint code{background:var(--bg);padding:1px 5px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:10px}
+
+/* Grid */
+.grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr;gap:6px;padding:6px;height:calc(100vh - 56px);background:var(--bg)}
+.cam-tile{position:relative;background:var(--surface);border-radius:8px;overflow:hidden;cursor:pointer;border:1px solid var(--border);transition:border-color .2s}
+.cam-tile:hover{border-color:#3a3a50}
+
+/* Video */
+.cam-tile video,.cam-tile img.mjpeg{width:100%;height:100%;object-fit:cover;display:block;background:#000}
+.cam-tile img.mjpeg{position:absolute;inset:0}
+
+/* Overlay info */
+.cam-overlay{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;padding:12px 14px}
+.cam-top{display:flex;align-items:flex-start;justify-content:space-between}
+.cam-name{font-size:13px;font-weight:700;letter-spacing:2px;text-shadow:0 1px 4px rgba(0,0,0,.8)}
+.cam-badges{display:flex;gap:6px;align-items:center}
+.badge{font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;letter-spacing:.5px;text-transform:uppercase;backdrop-filter:blur(6px)}
+.badge-live{background:rgba(34,197,94,.2);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.badge-connecting{background:rgba(234,179,8,.2);color:var(--yellow);border:1px solid rgba(234,179,8,.3);animation:pulse-badge 1.5s ease infinite}
+@keyframes pulse-badge{0%,100%{opacity:1}50%{opacity:.5}}
+.badge-error{background:rgba(239,68,68,.2);color:var(--accent);border:1px solid rgba(239,68,68,.3)}
+.badge-method{background:rgba(59,130,246,.15);color:var(--blue);border:1px solid rgba(59,130,246,.25)}
+.cam-bottom{display:flex;justify-content:space-between;align-items:flex-end}
+.cam-time{font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(255,255,255,.5)}
+
+/* No Signal */
+.no-signal{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--surface);gap:14px;z-index:2}
+.no-signal svg{opacity:.3}
+.no-signal-text{font-size:14px;font-weight:600;letter-spacing:3px;color:var(--text-muted)}
+.retry-btn{pointer-events:all;font-family:'Inter',sans-serif;font-size:12px;font-weight:600;padding:8px 20px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;letter-spacing:1px;transition:all .2s}
+.retry-btn:hover{background:#252538;border-color:#4a4a60}
+
+/* Fullscreen overlay */
+.fs-overlay{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:100;display:none;flex-direction:column;align-items:center;justify-content:center}
+.fs-overlay.active{display:flex}
+.fs-close{position:absolute;top:16px;right:20px;width:40px;height:40px;border-radius:50%;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:101;transition:background .2s}
+.fs-close:hover{background:var(--surface2)}
+.fs-video-wrap{width:90vw;height:85vh;position:relative}
+.fs-video-wrap video,.fs-video-wrap img.mjpeg{width:100%;height:100%;object-fit:contain;background:#000}
+.fs-info{position:absolute;top:12px;left:16px;display:flex;gap:8px;align-items:center}
+.stream-select{font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;outline:none;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238888a0' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 6px center;padding-right:22px}
+.stream-select:hover{border-color:#4a4a60}
+.stream-select:focus{border-color:var(--blue)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="rec-dot"></div>
+    <div class="header-title">Live Surveillance</div>
+  </div>
+  <div class="header-right">
+    <div class="server-indicator" id="serverBadge"></div>
+    <select class="stream-select" id="streamMethod" title="Stream Method">
+      <option value="auto">AUTO</option>
+      <option value="hls">HLS (m3u8)</option>
+      <option value="mjpeg">MJPEG</option>
+      <option value="mse">MSE (MP4)</option>
+      <option value="webrtc">WebRTC</option>
+    </select>
+    <div class="header-time" id="headerTime"></div>
+    <button class="settings-btn" id="settingsBtn" title="Server Settings">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-backdrop" id="settingsModal">
+  <div class="modal">
+    <h2>⚙ SERVER SETTINGS</h2>
+    <p>Enter your go2rtc server URL. When deploying remotely, use your ngrok/Cloudflare tunnel HTTPS URL.</p>
+    <label>GO2RTC SERVER URL</label>
+    <input type="text" id="serverInput" placeholder="https://your-tunnel.ngrok-free.app">
+    <div class="modal-hint">
+      <strong>Examples:</strong><br>
+      Local: <code>http://localhost:1984</code><br>
+      Ngrok: <code>https://abc123.ngrok-free.app</code><br>
+      Cloudflare: <code>https://cam.yourdomain.com</code><br><br>
+      You can also set via URL: <code>?server=https://your-url</code>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="settingsCancel">Cancel</button>
+      <button class="btn-primary" id="settingsSave">Save & Reconnect</button>
+    </div>
+  </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="fs-overlay" id="fsOverlay">
+  <button class="fs-close" id="fsClose">&times;</button>
+  <div class="fs-video-wrap" id="fsWrap">
+    <div class="fs-info" id="fsInfo"></div>
+  </div>
+</div>
+
+<script>
+// --- Server URL config ---
+const DEFAULT_SERVER = 'http://localhost:1984';
+
+function getServerUrl() {
+  // Priority: URL param > localStorage > default
+  const params = new URLSearchParams(window.location.search);
+  const fromParam = params.get('server');
+  if (fromParam) {
+    // Normalize: strip trailing slash
+    const url = fromParam.replace(/\/+$/, '');
+    localStorage.setItem('go2rtc_server', url);
+    return url;
+  }
+  return localStorage.getItem('go2rtc_server') || DEFAULT_SERVER;
+}
+
+let SERVER_URL = getServerUrl();
+
+function getHttpBase() {
+  return SERVER_URL;
+}
+
+// Display current server
+function updateServerBadge() {
+  const badge = document.getElementById('serverBadge');
+  try {
+    const u = new URL(SERVER_URL);
+    badge.textContent = u.host;
+  } catch(e) {
+    badge.textContent = SERVER_URL;
+  }
+}
+updateServerBadge();
+
+// Settings modal
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  document.getElementById('serverInput').value = SERVER_URL;
+  document.getElementById('settingsModal').classList.add('active');
+});
+document.getElementById('settingsCancel').addEventListener('click', () => {
+  document.getElementById('settingsModal').classList.remove('active');
+});
+document.getElementById('settingsModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('settingsModal'))
+    document.getElementById('settingsModal').classList.remove('active');
+});
+document.getElementById('settingsSave').addEventListener('click', () => {
+  let val = document.getElementById('serverInput').value.trim().replace(/\/+$/, '');
+  if (!val) val = DEFAULT_SERVER;
+  // Add protocol if missing
+  if (!val.startsWith('http://') && !val.startsWith('https://')) {
+    val = 'https://' + val;
+  }
+  localStorage.setItem('go2rtc_server', val);
+  SERVER_URL = val;
+  updateServerBadge();
+  document.getElementById('settingsModal').classList.remove('active');
+  // Reconnect all cameras
+  CAMERAS.forEach(cam => startStream(cam.id));
+});
+
+// --- Camera config ---
+const CAMERAS = [
+  { id: 'cam1', name: 'CAM 01' },
+  { id: 'cam3', name: 'CAM 03' },
+];
+const WEBRTC_TIMEOUT = 8000;
+
+// State per camera
+const state = {};
+
+function formatDT(d) {
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mi = String(d.getMinutes()).padStart(2,'0');
+  const ss = String(d.getSeconds()).padStart(2,'0');
+  return `${dd}/${mm}/${yy}  ${hh}:${mi}:${ss}`;
+}
+
+function updateClock() {
+  document.getElementById('headerTime').textContent = formatDT(new Date());
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// Build tiles
+const grid = document.getElementById('grid');
+CAMERAS.forEach(cam => {
+  state[cam.id] = { method: null, status: 'idle', pc: null, lastFrame: null };
+  const tile = document.createElement('div');
+  tile.className = 'cam-tile';
+  tile.id = `tile-${cam.id}`;
+  tile.innerHTML = `
+    <video id="vid-${cam.id}" autoplay muted playsinline></video>
+    <div class="cam-overlay">
+      <div class="cam-top">
+        <span class="cam-name">${cam.name}</span>
+        <div class="cam-badges">
+          <span class="badge badge-connecting" id="status-${cam.id}">CONNECTING</span>
+          <span class="badge badge-method" id="method-${cam.id}" style="display:none"></span>
+        </div>
+      </div>
+      <div class="cam-bottom">
+        <span class="cam-time" id="time-${cam.id}">--</span>
+      </div>
+    </div>
+    <div class="no-signal" id="nosig-${cam.id}" style="display:none">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0119 12.55M5 12.55a10.94 10.94 0 015.17-2.39M10.71 5.05A16 16 0 0122.56 9M1.42 9a15.91 15.91 0 014.7-2.88M8.53 16.11a6 6 0 016.95 0M12 20h.01"/></svg>
+      <div class="no-signal-text">NO SIGNAL</div>
+      <button class="retry-btn" onclick="startStream('${cam.id}')">RETRY</button>
+    </div>`;
+  tile.addEventListener('click', e => {
+    if (e.target.closest('.retry-btn')) return;
+    openFullscreen(cam.id);
+  });
+  grid.appendChild(tile);
+});
+
+function setStatus(camId, status, method) {
+  const s = state[camId];
+  s.status = status;
+  s.method = method || s.method;
+  const el = document.getElementById(`status-${camId}`);
+  const mel = document.getElementById(`method-${camId}`);
+  const nosig = document.getElementById(`nosig-${camId}`);
+  nosig.style.display = 'none';
+  el.className = 'badge';
+  if (status === 'live') {
+    el.classList.add('badge-live');
+    el.textContent = 'LIVE';
+  } else if (status === 'connecting') {
+    el.classList.add('badge-connecting');
+    el.textContent = 'CONNECTING';
+  } else if (status === 'error') {
+    el.classList.add('badge-error');
+    el.textContent = 'ERROR';
+    nosig.style.display = 'flex';
+  }
+  if (s.method) {
+    mel.style.display = '';
+    mel.textContent = s.method.toUpperCase();
+  } else {
+    mel.style.display = 'none';
+  }
+}
+
+function updateFrameTime(camId) {
+  state[camId].lastFrame = new Date();
+}
+
+// Auto-crop green H.264 padding via JPEG pixel scan
+async function autoCropGreen(vid, camId) {
+  if (!vid || !vid.videoWidth || !vid.videoHeight) return;
+  console.log(`[AutoCrop] ${camId}: video=${vid.videoWidth}x${vid.videoHeight}`);
+  let cropPct = 0;
+  try {
+    const resp = await fetch(`${getHttpBase()}/api/frame.jpeg?src=${camId}`);
+    if (resp.ok) {
+      const blob = await resp.blob();
+      const bmp = await createImageBitmap(blob);
+      const c = document.createElement('canvas');
+      c.width = bmp.width; c.height = bmp.height;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(bmp, 0, 0);
+      const scanY = Math.floor(bmp.height * 0.4);
+      const row = ctx.getImageData(0, scanY, bmp.width, 1).data;
+      let contentEnd = bmp.width;
+      for (let x = bmp.width - 1; x >= 0; x--) {
+        const r = row[x*4], g = row[x*4+1], b = row[x*4+2];
+        if (!(r < 50 && g > 100 && b < 50)) { contentEnd = x + 1; break; }
+      }
+      cropPct = ((bmp.width - contentEnd) / bmp.width) * 100;
+      console.log(`[AutoCrop] ${camId}: JPEG ${bmp.width}x${bmp.height} contentEnd=${contentEnd} crop=${cropPct.toFixed(1)}%`);
+      bmp.close();
+    }
+  } catch (e) { console.warn(`[AutoCrop] ${camId}: JPEG scan failed`, e); }
+  if (cropPct < 3) { cropPct = 25; console.log(`[AutoCrop] ${camId}: using default crop 25%`); }
+  applyCrop(vid, cropPct);
+}
+function applyCrop(vid, cropPct) {
+  if (cropPct < 1) return;
+  const scaleX = 100 / (100 - cropPct);
+  vid.style.objectFit = 'cover';
+  vid.style.objectPosition = 'left center';
+  vid.style.clipPath = `inset(0 ${cropPct.toFixed(1)}% 0 0)`;
+  vid.style.transform = `scaleX(${scaleX.toFixed(4)})`;
+  vid.style.transformOrigin = 'left center';
+  console.log(`[AutoCrop] Applied: crop=${cropPct.toFixed(1)}% scaleX=${scaleX.toFixed(4)}`);
+}
+
+function tickFrameTimes() {
+  CAMERAS.forEach(cam => {
+    const s = state[cam.id];
+    const el = document.getElementById(`time-${cam.id}`);
+    if (s.lastFrame) {
+      el.textContent = formatDT(s.lastFrame);
+    }
+  });
+}
+setInterval(tickFrameTimes, 1000);
+
+// --- Streaming methods ---
+
+function cleanup(camId) {
+  const s = state[camId];
+  if (s.pc) { try { s.pc.close(); } catch(e){} s.pc = null; }
+  if (s.hls) { try { s.hls.destroy(); } catch(e){} s.hls = null; }
+  const vid = document.getElementById(`vid-${camId}`);
+  vid.srcObject = null;
+  vid.src = '';
+  vid.style.clipPath = '';
+  vid.style.transform = '';
+  vid.style.transformOrigin = '';
+  vid.style.objectPosition = '';
+  vid.load();
+  const tile = document.getElementById(`tile-${camId}`);
+  const oldImg = tile.querySelector('img.mjpeg');
+  if (oldImg) oldImg.remove();
+}
+
+async function tryWebRTC(camId) {
+  return new Promise(async (resolve) => {
+    const vid = document.getElementById(`vid-${camId}`);
+    let settled = false;
+    const timeout = setTimeout(() => { if (!settled) { settled = true; resolve(false); } }, WEBRTC_TIMEOUT);
+
+    try {
+      const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      state[camId].pc = pc;
+      const ms = new MediaStream();
+      vid.srcObject = ms;
+
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+
+      pc.ontrack = (ev) => {
+        ms.addTrack(ev.track);
+        if (ev.track.kind === 'video') {
+          updateFrameTime(camId);
+          if (!settled) { settled = true; clearTimeout(timeout); resolve(true); }
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+          if (!settled) { settled = true; clearTimeout(timeout); resolve(false); }
+        }
+      };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const resp = await fetch(`${getHttpBase()}/api/webrtc?src=${camId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/sdp' },
+        body: pc.localDescription.sdp,
+      });
+      if (!resp.ok) { if (!settled) { settled = true; clearTimeout(timeout); resolve(false); } return; }
+
+      const sdp = await resp.text();
+      await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp }));
+
+      vid.play().catch(() => {});
+      vid.addEventListener('timeupdate', () => updateFrameTime(camId));
+      vid.addEventListener('loadedmetadata', () => autoCropGreen(vid));
+    } catch (e) {
+      console.warn(`WebRTC failed for ${camId}:`, e);
+      if (!settled) { settled = true; clearTimeout(timeout); resolve(false); }
+    }
+  });
+}
+
+async function tryMSE(camId) {
+  return new Promise((resolve) => {
+    const vid = document.getElementById(`vid-${camId}`);
+    let settled = false;
+    const timeout = setTimeout(() => { if (!settled) { settled = true; resolve(false); } }, WEBRTC_TIMEOUT);
+
+    vid.src = `${getHttpBase()}/api/stream.mp4?src=${camId}`;
+    vid.addEventListener('loadeddata', function onLoad() {
+      vid.removeEventListener('loadeddata', onLoad);
+      updateFrameTime(camId);
+      if (!settled) { settled = true; clearTimeout(timeout); resolve(true); }
+    });
+    vid.addEventListener('error', function onErr() {
+      vid.removeEventListener('error', onErr);
+      if (!settled) { settled = true; clearTimeout(timeout); resolve(false); }
+    });
+    vid.addEventListener('timeupdate', () => updateFrameTime(camId));
+    vid.addEventListener('loadedmetadata', () => autoCropGreen(vid));
+    vid.play().catch(() => {});
+  });
+}
+
+async function tryMJPEG(camId) {
+  return new Promise((resolve) => {
+    const tile = document.getElementById(`tile-${camId}`);
+    const vid = document.getElementById(`vid-${camId}`);
+    vid.style.display = 'none';
+    let settled = false;
+    const timeout = setTimeout(() => { if (!settled) { settled = true; resolve(false); } }, WEBRTC_TIMEOUT);
+
+    const img = document.createElement('img');
+    img.className = 'mjpeg';
+    img.src = `${getHttpBase()}/api/stream.mjpeg?src=${camId}`;
+    img.onload = () => {
+      updateFrameTime(camId);
+      if (!settled) { settled = true; clearTimeout(timeout); resolve(true); }
+      setInterval(() => updateFrameTime(camId), 1000);
+    };
+    img.onerror = () => {
+      if (!settled) { settled = true; clearTimeout(timeout); resolve(false); }
+    };
+    tile.insertBefore(img, tile.querySelector('.cam-overlay'));
+  });
+}
+
+async function tryHLS(camId) {
+  return new Promise((resolve) => {
+    const vid = document.getElementById(`vid-${camId}`);
+    vid.crossOrigin = 'anonymous';
+    let settled = false;
+    const timeout = setTimeout(() => { if (!settled) { settled = true; resolve(false); } }, 15000);
+    const hlsUrl = `${getHttpBase()}/api/stream.m3u8?src=${camId}`;
+    console.log(`[HLS] ${camId}: loading ${hlsUrl}`);
+
+    // iOS Safari has native HLS support
+    if (vid.canPlayType('application/vnd.apple.mpegurl')) {
+      vid.src = hlsUrl;
+      vid.addEventListener('loadeddata', function onLoad() {
+        vid.removeEventListener('loadeddata', onLoad);
+        updateFrameTime(camId);
+        if (!settled) { settled = true; clearTimeout(timeout); resolve(true); }
+      });
+      vid.addEventListener('error', function onErr() {
+        vid.removeEventListener('error', onErr);
+        console.warn(`[HLS] ${camId}: native HLS error`, vid.error);
+        if (!settled) { settled = true; clearTimeout(timeout); resolve(false); }
+      });
+      vid.addEventListener('timeupdate', () => updateFrameTime(camId));
+      vid.play().catch(() => {});
+      return;
+    }
+
+    // Use hls.js for other browsers
+    if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        xhrSetup: function(xhr, url) {
+          xhr.withCredentials = false;
+        }
+      });
+      state[camId].hls = hls;
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(vid);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        console.log(`[HLS] ${camId}: manifest parsed, starting playback`);
+        vid.play().catch(() => {});
+      });
+      vid.addEventListener('loadeddata', function onLoad() {
+        vid.removeEventListener('loadeddata', onLoad);
+        updateFrameTime(camId);
+        if (!settled) { settled = true; clearTimeout(timeout); resolve(true); }
+      });
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        console.warn(`[HLS] ${camId}: error type=${data.type} details=${data.details} fatal=${data.fatal}`);
+        if (data.fatal) {
+          hls.destroy();
+          if (!settled) { settled = true; clearTimeout(timeout); resolve(false); }
+        }
+      });
+      vid.addEventListener('timeupdate', () => updateFrameTime(camId));
+      return;
+    }
+
+    console.warn('[HLS] Not supported on this browser');
+    if (!settled) { settled = true; clearTimeout(timeout); resolve(false); }
+  });
+}
+
+function getStreamMethod() {
+  return localStorage.getItem('stream_method') || 'auto';
+}
+
+// Stream method selector
+const streamSelect = document.getElementById('streamMethod');
+streamSelect.value = getStreamMethod();
+streamSelect.addEventListener('change', () => {
+  localStorage.setItem('stream_method', streamSelect.value);
+  CAMERAS.forEach(cam => startStream(cam.id));
+});
+
+async function startStream(camId) {
+  cleanup(camId);
+  const vid = document.getElementById(`vid-${camId}`);
+  vid.style.display = '';
+  const method = getStreamMethod();
+
+  if (method === 'hls') {
+    setStatus(camId, 'connecting', 'hls');
+    if (await tryHLS(camId)) { setStatus(camId, 'live', 'hls'); scheduleAutoCrop(camId); return; }
+    cleanup(camId);
+    setStatus(camId, 'error', null);
+    return;
+  }
+  if (method === 'mjpeg') {
+    setStatus(camId, 'connecting', 'mjpeg');
+    if (await tryMJPEG(camId)) { setStatus(camId, 'live', 'mjpeg'); return; }
+    cleanup(camId);
+    setStatus(camId, 'error', null);
+    return;
+  }
+  if (method === 'mse') {
+    setStatus(camId, 'connecting', 'mse');
+    if (await tryMSE(camId)) { setStatus(camId, 'live', 'mse'); scheduleAutoCrop(camId); return; }
+    cleanup(camId);
+    setStatus(camId, 'error', null);
+    return;
+  }
+  if (method === 'webrtc') {
+    setStatus(camId, 'connecting', 'webrtc');
+    if (await tryWebRTC(camId)) { setStatus(camId, 'live', 'webrtc'); scheduleAutoCrop(camId); return; }
+    cleanup(camId);
+    setStatus(camId, 'error', null);
+    return;
+  }
+
+  // Auto: HLS → MJPEG → MSE → WebRTC
+  setStatus(camId, 'connecting', 'hls');
+  if (await tryHLS(camId)) { setStatus(camId, 'live', 'hls'); scheduleAutoCrop(camId); return; }
+  cleanup(camId); vid.style.display = '';
+
+  setStatus(camId, 'connecting', 'mjpeg');
+  if (await tryMJPEG(camId)) { setStatus(camId, 'live', 'mjpeg'); return; }
+  cleanup(camId); vid.style.display = '';
+
+  setStatus(camId, 'connecting', 'mse');
+  if (await tryMSE(camId)) { setStatus(camId, 'live', 'mse'); scheduleAutoCrop(camId); return; }
+  cleanup(camId); vid.style.display = '';
+
+  setStatus(camId, 'connecting', 'webrtc');
+  if (await tryWebRTC(camId)) { setStatus(camId, 'live', 'webrtc'); scheduleAutoCrop(camId); return; }
+  cleanup(camId);
+
+  setStatus(camId, 'error', null);
+}
+
+// Poll for video dimensions then auto-crop green padding
+function scheduleAutoCrop(camId) {
+  const vid = document.getElementById(`vid-${camId}`);
+  let attempts = 0;
+  const poll = setInterval(() => {
+    attempts++;
+    if (vid.videoWidth > 0 && vid.videoHeight > 0) {
+      clearInterval(poll);
+      autoCropGreen(vid, camId);
+    }
+    if (attempts > 20) clearInterval(poll); // Give up after 10s
+  }, 500);
+}
+
+// --- Fullscreen ---
+const fsOverlay = document.getElementById('fsOverlay');
+const fsWrap = document.getElementById('fsWrap');
+const fsInfo = document.getElementById('fsInfo');
+let fsActive = null;
+
+function openFullscreen(camId) {
+  const s = state[camId];
+  if (s.status !== 'live') return;
+  fsActive = camId;
+  const cam = CAMERAS.find(c => c.id === camId);
+
+  fsInfo.innerHTML = `<span class="cam-name">${cam.name}</span><span class="badge badge-live">LIVE</span><span class="badge badge-method">${(s.method||'').toUpperCase()}</span>`;
+
+  const tile = document.getElementById(`tile-${camId}`);
+  const mjpeg = tile.querySelector('img.mjpeg');
+  const existingMedia = fsWrap.querySelector('video, img.mjpeg');
+  if (existingMedia) existingMedia.remove();
+
+  if (mjpeg) {
+    const img = document.createElement('img');
+    img.className = 'mjpeg';
+    img.src = mjpeg.src;
+    fsWrap.appendChild(img);
+  } else {
+    const vid = document.createElement('video');
+    vid.autoplay = true; vid.muted = true; vid.playsInline = true;
+    const srcVid = document.getElementById(`vid-${camId}`);
+    if (srcVid.srcObject) {
+      vid.srcObject = srcVid.srcObject;
+    } else if (srcVid.src) {
+      vid.src = srcVid.src;
+    }
+    vid.play().catch(() => {});
+    fsWrap.appendChild(vid);
+  }
+  fsOverlay.classList.add('active');
+}
+
+document.getElementById('fsClose').addEventListener('click', (e) => {
+  e.stopPropagation();
+  fsOverlay.classList.remove('active');
+  const m = fsWrap.querySelector('video, img.mjpeg');
+  if (m) m.remove();
+  fsActive = null;
+});
+fsOverlay.addEventListener('click', (e) => {
+  if (e.target === fsOverlay) {
+    document.getElementById('fsClose').click();
+  }
+});
+
+// Start all streams
+CAMERAS.forEach(cam => startStream(cam.id));
+</script>
+</body>
+</html>

@@ -1,7 +1,9 @@
 import Script from "next/script";
 
 export default function Home() {
-  const defaultServer = process.env.NEXT_PUBLIC_GO2RTC_SERVER || "http://localhost:1984";
+  const defaultServer = process.env.GO2RTC_SERVER || process.env.NEXT_PUBLIC_GO2RTC_SERVER || "http://localhost:1984";
+  const defaultCameras =
+    process.env.NEXT_PUBLIC_CAMERAS || "cam1:CAM 01,cam2:CAM 02,cam3:CAM 03,cam4:CAM 04";
 
   return (
     <>
@@ -11,12 +13,12 @@ export default function Home() {
           <div className="header-title">Live Surveillance</div>
         </div>
         <div className="header-right">
-          {/*<div className="server-indicator" id="serverBadge"></div>*/}
+          <div className="server-indicator" id="serverBadge"></div>
           <div className="header-time" id="headerTime"></div>
         </div>
       </div>
 
-      <div id="appConfig" data-default-server={defaultServer} hidden></div>
+      <div id="appConfig" data-default-server={defaultServer} data-cameras={defaultCameras} hidden></div>
       <div className="grid" id="grid"></div>
 
       <div className="fs-overlay" id="fsOverlay">
@@ -26,7 +28,7 @@ export default function Home() {
         </div>
       </div>
 
-      <Script src="/app.js?v=20260508b" strategy="afterInteractive" />
+      <Script src="/app.js?v=20260509b" strategy="afterInteractive" />
     </>
   );
 }
