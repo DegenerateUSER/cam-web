@@ -143,7 +143,7 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
 
 <script>
 // --- Server URL config ---
-const DEFAULT_SERVER = 'http://localhost:1984';
+const DEFAULT_SERVER = 'https://f3d5-2401-4900-8811-12fe-ec9d-6c50-e64c-a8bd.ngrok-free.app';
 
 function getServerUrl() {
   // Priority: URL param > localStorage > default
@@ -161,6 +161,11 @@ function getServerUrl() {
 let SERVER_URL = getServerUrl();
 
 function getHttpBase() {
+  // On deployed site, use relative paths (proxied via _redirects)
+  const host = window.location.hostname;
+  if (host !== 'localhost' && host !== '127.0.0.1' && !host.startsWith('192.168.') && window.location.protocol !== 'file:') {
+    return ''; // Use relative /api/* paths — Netlify proxies to go2rtc
+  }
   return SERVER_URL;
 }
 
