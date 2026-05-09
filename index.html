@@ -403,7 +403,7 @@ async function tryWebRTC(camId) {
 
       const resp = await fetch(`${getHttpBase()}/api/webrtc?src=${camId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/sdp' },
+        headers: { 'Content-Type': 'application/sdp', 'ngrok-skip-browser-warning': 'true' },
         body: pc.localDescription.sdp,
       });
       if (!resp.ok) { if (!settled) { settled = true; clearTimeout(timeout); resolve(false); } return; }
@@ -482,6 +482,7 @@ async function tryHLS(camId) {
         lowLatencyMode: true,
         xhrSetup: function(xhr, url) {
           xhr.withCredentials = false;
+          xhr.setRequestHeader('ngrok-skip-browser-warning', 'true');
         }
       });
       state[camId].hls = hls;
