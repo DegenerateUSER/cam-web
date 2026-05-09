@@ -475,25 +475,7 @@ async function tryHLS(camId) {
     const hlsUrl = `${getHttpBase()}/api/stream.m3u8?src=${camId}`;
     console.log(`[HLS] ${camId}: loading ${hlsUrl}`);
 
-    // iOS Safari has native HLS support
-    if (vid.canPlayType('application/vnd.apple.mpegurl')) {
-      vid.src = hlsUrl;
-      vid.addEventListener('loadeddata', function onLoad() {
-        vid.removeEventListener('loadeddata', onLoad);
-        updateFrameTime(camId);
-        if (!settled) { settled = true; clearTimeout(timeout); resolve(true); }
-      });
-      vid.addEventListener('error', function onErr() {
-        vid.removeEventListener('error', onErr);
-        console.warn(`[HLS] ${camId}: native HLS error`, vid.error);
-        if (!settled) { settled = true; clearTimeout(timeout); resolve(false); }
-      });
-      vid.addEventListener('timeupdate', () => updateFrameTime(camId));
-      vid.play().catch(() => {});
-      return;
-    }
-
-    // Use hls.js for other browsers
+    // Prefer hls.js (uses MSE internally, better codec support)
     if (typeof Hls !== 'undefined' && Hls.isSupported()) {
       const hls = new Hls({
         enableWorker: true,
@@ -522,6 +504,24 @@ async function tryHLS(camId) {
         }
       });
       vid.addEventListener('timeupdate', () => updateFrameTime(camId));
+      return;
+    }
+    // Fallback: native HLS (iOS Safari where hls.js isn't supported)
+    if (vid.canPlayType('application/vnd.apple.mpegurl')) {
+      console.log(`[HLS] ${camId}: trying native HLS`);
+      vid.src = hlsUrl;
+      vid.addEventListener('loadeddata', function onLoad() {
+        vid.removeEventListener('loadeddata', onLoad);
+        updateFrameTime(camId);
+        if (!settled) { settled = true; clearTimeout(timeout); resolve(true); }
+      });
+      vid.addEventListener('error', function onErr() {
+        vid.removeEventListener('error', onErr);
+        console.warn(`[HLS] ${camId}: native HLS error`, vid.error);
+        if (!settled) { settled = true; clearTimeout(timeout); resolve(false); }
+      });
+      vid.addEventListener('timeupdate', () => updateFrameTime(camId));
+      vid.play().catch(() => {});
       return;
     }
 
