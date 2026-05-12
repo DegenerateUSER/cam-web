@@ -36,12 +36,12 @@ async function parseCredentials(request) {
   };
 }
 
-function buildAuthCookie(token, requestUrl) {
+function buildAuthCookie(token, request) {
   return {
     name: AUTH_COOKIE_NAME,
     value: token,
     httpOnly: true,
-    secure: shouldUseSecureCookie(requestUrl),
+    secure: shouldUseSecureCookie(request),
     sameSite: "lax",
     path: "/",
     maxAge: AUTH_SESSION_TTL_SECONDS,
@@ -57,18 +57,24 @@ export async function POST(request) {
     if (jsonResponse) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
-    return NextResponse.redirect(new URL("/login?error=1", request.url), 303);
+    return new NextResponse(null, {
+      status: 303,
+      headers: { Location: "/login?error=1" },
+    });
   }
 
   const token = createSessionToken(credentials.username);
 
   if (jsonResponse) {
     const response = NextResponse.json({ ok: true });
-    response.cookies.set(buildAuthCookie(token, request.url));
+    response.cookies.set(buildAuthCookie(token, request));
     return response;
   }
 
-  const response = NextResponse.redirect(new URL("/", request.url), 303);
-  response.cookies.set(buildAuthCookie(token, request.url));
+  const response = new NextResponse(null, {
+    status: 303,
+    headers: { Location: "/" },
+  });
+  response.cookies.set(buildAuthCookie(token, request));
   return response;
 }

@@ -83,9 +83,19 @@ export function ensureAuthenticatedRequest(request) {
   return new Response("Unauthorized", { status: 401 });
 }
 
-export function shouldUseSecureCookie(requestUrl) {
+export function shouldUseSecureCookie(requestOrUrl) {
+  if (requestOrUrl && typeof requestOrUrl === "object" && "headers" in requestOrUrl) {
+    const forwardedProto =
+      requestOrUrl.headers.get("x-forwarded-proto") ||
+      requestOrUrl.headers.get("x-forwarded-protocol");
+    if (forwardedProto) {
+      return forwardedProto.split(",")[0].trim() === "https";
+    }
+    requestOrUrl = requestOrUrl.url;
+  }
+
   try {
-    return new URL(requestUrl).protocol === "https:";
+    return new URL(String(requestOrUrl || "")).protocol === "https:";
   } catch {
     return false;
   }

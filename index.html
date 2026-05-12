@@ -120,7 +120,7 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
     <input type="text" id="serverInput" placeholder="https://your-tunnel.ngrok-free.app">
     <div class="modal-hint">
       <strong>Examples:</strong><br>
-      Local: <code>http://localhost:1984</code><br>
+      Local: <code>https://localhost:1984</code><br>
       Ngrok: <code>https://abc123.ngrok-free.app</code><br>
       Cloudflare: <code>https://cam.yourdomain.com</code><br><br>
       You can also set via URL: <code>?server=https://your-url</code>
@@ -145,17 +145,34 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
 // --- Server URL config ---
 const DEFAULT_SERVER = 'https://rtc.aacctrust.in';
 
+function normalizeServerUrl(value) {
+  let val = value.trim().replace(/\/+$/, '');
+  if (!val) return DEFAULT_SERVER;
+  if (!val.startsWith('http://') && !val.startsWith('https://')) {
+    return 'https://' + val;
+  }
+  if (val.startsWith('http://')) {
+    return 'https://' + val.slice('http://'.length);
+  }
+  return val;
+}
+
 function getServerUrl() {
   // Priority: URL param > localStorage > default
   const params = new URLSearchParams(window.location.search);
   const fromParam = params.get('server');
   if (fromParam) {
-    // Normalize: strip trailing slash
-    const url = fromParam.replace(/\/+$/, '');
+    const url = normalizeServerUrl(fromParam);
     localStorage.setItem('go2rtc_server', url);
     return url;
   }
-  return localStorage.getItem('go2rtc_server') || DEFAULT_SERVER;
+  const fromStorage = localStorage.getItem('go2rtc_server');
+  if (fromStorage) {
+    const url = normalizeServerUrl(fromStorage);
+    localStorage.setItem('go2rtc_server', url);
+    return url;
+  }
+  return DEFAULT_SERVER;
 }
 
 let SERVER_URL = getServerUrl();
@@ -194,12 +211,7 @@ document.getElementById('settingsModal').addEventListener('click', (e) => {
     document.getElementById('settingsModal').classList.remove('active');
 });
 document.getElementById('settingsSave').addEventListener('click', () => {
-  let val = document.getElementById('serverInput').value.trim().replace(/\/+$/, '');
-  if (!val) val = DEFAULT_SERVER;
-  // Add protocol if missing
-  if (!val.startsWith('http://') && !val.startsWith('https://')) {
-    val = 'https://' + val;
-  }
+  const val = normalizeServerUrl(document.getElementById('serverInput').value);
   localStorage.setItem('go2rtc_server', val);
   SERVER_URL = val;
   updateServerBadge();
