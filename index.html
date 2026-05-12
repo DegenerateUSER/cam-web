@@ -143,7 +143,7 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
 
 <script>
 // --- Server URL config ---
-const DEFAULT_SERVER = 'https://f3d5-2401-4900-8811-12fe-ec9d-6c50-e64c-a8bd.ngrok-free.app';
+const DEFAULT_SERVER = 'https://rtc.aacctrust.in';
 
 function getServerUrl() {
   // Priority: URL param > localStorage > default
@@ -236,6 +236,16 @@ updateClock();
 
 // Build tiles
 const grid = document.getElementById('grid');
+if (grid) {
+  const applyGridLayout = () => {
+    const columns = CAMERAS.length === 1 ? 1 : window.innerWidth <= 900 ? 1 : 2;
+    const rowCount = Math.max(1, Math.ceil(CAMERAS.length / columns));
+    grid.style.gridTemplateColumns = columns === 1 ? '1fr' : '1fr 1fr';
+    grid.style.gridTemplateRows = `repeat(${rowCount}, minmax(0, 1fr))`;
+  };
+  applyGridLayout();
+  window.addEventListener('resize', applyGridLayout);
+}
 CAMERAS.forEach(cam => {
   state[cam.id] = { method: null, status: 'idle', pc: null, lastFrame: null };
   const tile = document.createElement('div');
@@ -617,6 +627,16 @@ const fsOverlay = document.getElementById('fsOverlay');
 const fsWrap = document.getElementById('fsWrap');
 const fsInfo = document.getElementById('fsInfo');
 let fsActive = null;
+let fsHls = null;
+
+function clearFullscreenMedia() {
+  if (fsHls) {
+    try { fsHls.destroy(); } catch (e) {}
+    fsHls = null;
+  }
+  const media = fsWrap.querySelector('video, img.mjpeg');
+  if (media) media.remove();
+}
 
 function openFullscreen(camId) {
   const s = state[camId];
@@ -627,15 +647,43 @@ function openFullscreen(camId) {
   fsInfo.innerHTML = `<span class="cam-name">${cam.name}</span><span class="badge badge-live">LIVE</span><span class="badge badge-method">${(s.method||'').toUpperCase()}</span>`;
 
   const tile = document.getElementById(`tile-${camId}`);
+  clearFullscreenMedia();
+
   const mjpeg = tile.querySelector('img.mjpeg');
-  const existingMedia = fsWrap.querySelector('video, img.mjpeg');
-  if (existingMedia) existingMedia.remove();
+  const sourceId = state[camId]?.activeSource || camId;
 
   if (mjpeg) {
     const img = document.createElement('img');
     img.className = 'mjpeg';
     img.src = mjpeg.src;
     fsWrap.appendChild(img);
+  } else if (s.method === 'hls') {
+    const vid = document.createElement('video');
+    vid.autoplay = true; vid.muted = true; vid.playsInline = true;
+    fsWrap.appendChild(vid);
+    const hlsUrl = `${getHttpBase()}/api/stream.m3u8?src=${encodeURIComponent(sourceId)}`;
+
+    if (typeof window.Hls !== 'undefined' && window.Hls.isSupported()) {
+      const hls = new window.Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+      });
+      fsHls = hls;
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(vid);
+      hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+        vid.play().catch(() => {});
+      });
+      hls.on(window.Hls.Events.ERROR, (event, data) => {
+        if (data?.fatal) {
+          try { hls.destroy(); } catch (e) {}
+          if (fsHls === hls) fsHls = null;
+        }
+      });
+    } else {
+      vid.src = hlsUrl;
+      vid.play().catch(() => {});
+    }
   } else {
     const vid = document.createElement('video');
     vid.autoplay = true; vid.muted = true; vid.playsInline = true;
@@ -654,8 +702,7 @@ function openFullscreen(camId) {
 document.getElementById('fsClose').addEventListener('click', (e) => {
   e.stopPropagation();
   fsOverlay.classList.remove('active');
-  const m = fsWrap.querySelector('video, img.mjpeg');
-  if (m) m.remove();
+  clearFullscreenMedia();
   fsActive = null;
 });
 fsOverlay.addEventListener('click', (e) => {

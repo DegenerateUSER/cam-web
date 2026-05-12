@@ -4,25 +4,21 @@ import { ensureAuthenticatedRequest } from "../_lib/auth";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function POST(request) {
+export async function GET(request) {
   const unauthorized = ensureAuthenticatedRequest(request);
   if (unauthorized) return unauthorized;
 
   const upstreamBase = getGo2RtcBaseUrl();
   const reqUrl = new URL(request.url);
   const query = reqUrl.search || "";
-  const sdp = await request.text();
   const headers = copyUpstreamHeaders(request);
-  headers.set("content-type", "application/sdp");
-
-  const candidatePaths = ["/api/webrtc", "/webrtc"];
+  const candidatePaths = ["/api/frame.jpeg", "/frame.jpeg"];
   let lastResponse = null;
 
   for (const path of candidatePaths) {
     const upstreamResponse = await fetch(`${upstreamBase}${path}${query}`, {
-      method: "POST",
+      method: "GET",
       headers,
-      body: sdp,
       cache: "no-store",
     });
 
