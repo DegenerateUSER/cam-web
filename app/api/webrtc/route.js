@@ -1,4 +1,4 @@
-import { copyUpstreamHeaders, getGo2RtcBaseUrl, toClientResponse } from "../_lib/go2rtc";
+import { copyUpstreamHeaders, getUpstreamBaseFromRequest, stripLocFromQuery, toClientResponse } from "../_lib/go2rtc";
 import { ensureAuthenticatedRequest } from "../_lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -8,9 +8,9 @@ export async function POST(request) {
   const unauthorized = ensureAuthenticatedRequest(request);
   if (unauthorized) return unauthorized;
 
-  const upstreamBase = getGo2RtcBaseUrl();
+  const upstreamBase = getUpstreamBaseFromRequest(request);
   const reqUrl = new URL(request.url);
-  const query = reqUrl.search || "";
+  const query = stripLocFromQuery(request.url);
   const sdp = await request.text();
   const headers = copyUpstreamHeaders(request);
   headers.set("content-type", "application/sdp");
@@ -24,6 +24,7 @@ export async function POST(request) {
       headers,
       body: sdp,
       cache: "no-store",
+      redirect: "manual",
     });
 
     if (upstreamResponse.status !== 404) {

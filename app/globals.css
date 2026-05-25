@@ -112,9 +112,10 @@ body {
   white-space: nowrap;
 }
 
-/* ── Location Select Dropdown ── */
+/* ── Dropdowns & Buttons ── */
 
 .location-select,
+.stream-select,
 .logout-btn,
 .retry-btn,
 .auth-form button {
@@ -125,22 +126,33 @@ body {
   transition: all 0.18s ease;
 }
 
-.location-select {
-  font-family: "Inter", system-ui, sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 7px 28px 7px 10px;
+.location-select,
+.stream-select {
   cursor: pointer;
   outline: none;
   appearance: none;
   -webkit-appearance: none;
-  letter-spacing: 0.5px;
   background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239f9faa' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 8px center;
 }
 
+.location-select {
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 28px 7px 10px;
+  letter-spacing: 0.5px;
+}
+
+.stream-select {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  padding: 6px 24px 6px 10px;
+}
+
 .location-select:hover,
+.stream-select:hover,
 .logout-btn:hover,
 .retry-btn:hover {
   border-color: #3f3f49;
@@ -148,6 +160,7 @@ body {
 }
 
 .location-select:focus,
+.stream-select:focus,
 .auth-form input:focus {
   border-color: rgba(99, 102, 241, 0.8);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
@@ -341,6 +354,15 @@ body {
   min-height: 0;
 }
 
+.cam-click-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  cursor: pointer;
+  background: transparent;
+  pointer-events: auto;
+}
+
 .cam-tile::after {
   content: "";
   position: absolute;
@@ -353,10 +375,29 @@ body {
 
 .cam-tile iframe {
   width: 100%;
+  height: calc(100% + 54px) !important;
+  border: none;
+  display: block;
+  background: #000;
+  pointer-events: none;
+  position: absolute;
+  top: -6px;
+  left: 0;
+}
+
+.cam-tile video,
+.cam-tile video-stream {
+  width: 100%;
   height: 100%;
   border: none;
   display: block;
   background: #000;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.cam-tile video-stream .info {
+  display: none !important;
 }
 
 .cam-overlay {
@@ -525,6 +566,7 @@ body {
 }
 
 .fs-video-wrap video,
+.fs-video-wrap video-stream,
 .fs-video-wrap img.mjpeg {
   width: 100%;
   height: 100%;
@@ -705,6 +747,7 @@ body {
   }
 
   .location-select,
+  .stream-select,
   .header-time,
   .logout-btn {
     flex: 1 1 120px;

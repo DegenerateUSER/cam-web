@@ -91,7 +91,8 @@ export default function Home() {
         </div>
       </div>
 
-      <Script src="/app.js?v=20260523a" strategy="afterInteractive" />
+      <Script src="/video-stream.js" type="module" strategy="beforeInteractive" />
+      <Script src="/app.js?v=20260524_custom_v6" strategy="afterInteractive" />
     </>
   );
 }

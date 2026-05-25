@@ -1,14 +1,16 @@
-import { copyUpstreamHeaders, getGo2RtcBaseUrl, toClientResponse } from "../_lib/go2rtc";
+import { copyUpstreamHeaders, getUpstreamBaseFromRequest, getGo2RtcBaseUrlForLocation, toClientResponse } from "../_lib/go2rtc";
 import { ensureAuthenticatedRequest } from "../_lib/auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-function toHlsProxyUrl(upstreamUrl) {
-  return `/api/hls?u=${encodeURIComponent(upstreamUrl)}`;
+function toHlsProxyUrl(upstreamUrl, loc) {
+  let proxyUrl = `/api/hls?u=${encodeURIComponent(upstreamUrl)}`;
+  if (loc) proxyUrl += `&loc=${encodeURIComponent(loc)}`;
+  return proxyUrl;
 }
 
-function rewritePlaylistUrls(playlistText, upstreamManifestUrl) {
+function rewritePlaylistUrls(playlistText, upstreamManifestUrl, loc) {
   return playlistText
     .split(/\r?\n/)
     .map((line) => {
@@ -18,7 +20,7 @@ function rewritePlaylistUrls(playlistText, upstreamManifestUrl) {
       if (trimmed.startsWith("#")) {
         return line.replace(/URI="([^"]+)"/g, (_, uri) => {
           try {
-            return `URI="${toHlsProxyUrl(new URL(uri, upstreamManifestUrl).toString())}"`;
+            return `URI="${toHlsProxyUrl(new URL(uri, upstreamManifestUrl).toString(), loc)}"`;
           } catch {
             return `URI="${uri}"`;
           }
@@ -26,7 +28,7 @@ function rewritePlaylistUrls(playlistText, upstreamManifestUrl) {
       }
 
       try {
-        return toHlsProxyUrl(new URL(trimmed, upstreamManifestUrl).toString());
+        return toHlsProxyUrl(new URL(trimmed, upstreamManifestUrl).toString(), loc);
       } catch {
         return line;
       }
@@ -48,6 +50,16 @@ function resolveUpstreamTargetUrl(rawTarget, upstreamBase) {
   }
 }
 
+function isAllowedOrigin(targetUrl, loc) {
+  // Allow the target origin if it matches the location's server origin
+  const locationBase = getGo2RtcBaseUrlForLocation(loc);
+  try {
+    return targetUrl.origin === new URL(locationBase).origin;
+  } catch {
+    return false;
+  }
+}
+
 function isM3u8Response(targetUrl, upstreamResponse) {
   const contentType = upstreamResponse.headers.get("content-type") || "";
   return (
@@ -61,8 +73,9 @@ export async function GET(request) {
   const unauthorized = ensureAuthenticatedRequest(request);
   if (unauthorized) return unauthorized;
 
-  const upstreamBase = getGo2RtcBaseUrl();
+  const upstreamBase = getUpstreamBaseFromRequest(request);
   const reqUrl = new URL(request.url);
+  const loc = reqUrl.searchParams.get("loc") || "";
   const rawTarget = reqUrl.searchParams.get("u");
   const targetUrl = resolveUpstreamTargetUrl(rawTarget, upstreamBase);
 
@@ -70,8 +83,7 @@ export async function GET(request) {
     return new Response("missing or invalid u query parameter", { status: 400 });
   }
 
-  const upstreamOrigin = new URL(upstreamBase).origin;
-  if (targetUrl.origin !== upstreamOrigin) {
+  if (!isAllowedOrigin(targetUrl, loc)) {
     return new Response("forbidden target origin", { status: 403 });
   }
 
@@ -80,11 +92,12 @@ export async function GET(request) {
     method: "GET",
     headers,
     cache: "no-store",
+    redirect: "manual",
   });
 
   if (upstreamResponse.ok && isM3u8Response(targetUrl, upstreamResponse)) {
     const playlistText = await upstreamResponse.text();
-    const rewrittenPlaylist = rewritePlaylistUrls(playlistText, targetUrl.toString());
+    const rewrittenPlaylist = rewritePlaylistUrls(playlistText, targetUrl.toString(), loc);
     const responseHeaders = new Headers(upstreamResponse.headers);
     responseHeaders.delete("content-encoding");
     responseHeaders.delete("content-length");
