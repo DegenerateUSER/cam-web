@@ -3,10 +3,10 @@
 const LOCATIONS = {
   ghaziabad: {
     name: "Ghaziabad CPLI",
-    serverUrl: "https://camgzb.aacctrust.in",
+    serverUrl: "https://stream.aacctrust.in",
     cameras: [
-      { id: "camera1", name: "CAM 01" },
-      { id: "camera3", name: "CAM 02" },
+      { id: "cam1", name: "CAM 01" },
+      { id: "cam3", name: "CAM 02" },
     ],
   },
   hapur: {

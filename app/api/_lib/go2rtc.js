@@ -2,7 +2,7 @@ const DEFAULT_GO2RTC_SERVER = "https://rtc.aacctrust.in";
 
 // Location-specific go2rtc server URLs
 const LOCATION_SERVERS = {
-  ghaziabad: "https://camgzb.aacctrust.in",
+  ghaziabad: "https://stream.aacctrust.in",
   hapur: "https://cameras.aacctrust.in",
   shamli: "https://shamli-cctv.aacctrust.in",
 };
