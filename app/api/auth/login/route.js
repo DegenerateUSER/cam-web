@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import {
-  AUTH_COOKIE_NAME,
+  getAuthCookieName,
   AUTH_SESSION_TTL_SECONDS,
   createSessionToken,
   isValidCredentials,
   shouldUseSecureCookie,
+  VALID_LOCATIONS,
 } from "../../_lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ async function parseCredentials(request) {
     return {
       username: String(body.username || "").trim(),
       password: String(body.password || ""),
+      location: String(body.location || "").trim(),
     };
   }
 
@@ -33,12 +35,13 @@ async function parseCredentials(request) {
   return {
     username: String(form.get("username") || "").trim(),
     password: String(form.get("password") || ""),
+    location: String(form.get("location") || "").trim(),
   };
 }
 
-function buildAuthCookie(token, request) {
+function buildAuthCookie(token, location, request) {
   return {
-    name: AUTH_COOKIE_NAME,
+    name: getAuthCookieName(location),
     value: token,
     httpOnly: true,
     secure: shouldUseSecureCookie(request),
@@ -51,7 +54,20 @@ function buildAuthCookie(token, request) {
 export async function POST(request) {
   const credentials = await parseCredentials(request);
   const jsonResponse = wantsJsonResponse(request);
-  const valid = credentials && isValidCredentials(credentials.username, credentials.password);
+  const location = credentials?.location;
+
+  // Validate location
+  if (!location || !VALID_LOCATIONS.includes(location)) {
+    if (jsonResponse) {
+      return NextResponse.json({ error: "Invalid location" }, { status: 400 });
+    }
+    return new NextResponse(null, {
+      status: 303,
+      headers: { Location: "/" },
+    });
+  }
+
+  const valid = credentials && isValidCredentials(credentials.username, credentials.password, location);
 
   if (!valid) {
     if (jsonResponse) {
@@ -59,22 +75,22 @@ export async function POST(request) {
     }
     return new NextResponse(null, {
       status: 303,
-      headers: { Location: "/login?error=1" },
+      headers: { Location: `/${location}/login?error=1` },
     });
   }
 
-  const token = createSessionToken(credentials.username);
+  const token = createSessionToken(credentials.username, location);
 
   if (jsonResponse) {
     const response = NextResponse.json({ ok: true });
-    response.cookies.set(buildAuthCookie(token, request));
+    response.cookies.set(buildAuthCookie(token, location, request));
     return response;
   }
 
   const response = new NextResponse(null, {
     status: 303,
-    headers: { Location: "/" },
+    headers: { Location: `/${location}` },
   });
-  response.cookies.set(buildAuthCookie(token, request));
+  response.cookies.set(buildAuthCookie(token, location, request));
   return response;
 }

@@ -142,7 +142,7 @@ function startStream(camId) {
   iframe.setAttribute("loading", "lazy");
   iframe.title = `${camId} - ${config.name}`;
   iframe.style.width = "100%";
-  iframe.style.height = "calc(100% + 54px)"; // Height is set in CSS but keeps here as double safeguard
+  iframe.style.height = "calc(100% + 54px)";
   iframe.style.border = "none";
   iframe.style.background = "#000";
   iframe.style.position = "absolute";
@@ -194,13 +194,8 @@ function renderGrid(locationKey) {
   currentLocation = locationKey;
   currentCameras = location.cameras;
 
-  const picker = document.getElementById("locationPicker");
   const grid = document.getElementById("grid");
-  if (!picker || !grid) return;
-
-  // Hide picker, show grid
-  picker.style.display = "none";
-  grid.style.display = "";
+  if (!grid) return;
 
   // Clear old tiles
   grid.innerHTML = "";
@@ -225,8 +220,6 @@ function renderGrid(locationKey) {
     tile.className = "cam-tile";
     tile.id = `tile-${cam.id}`;
     
-    // We place a transparent cam-click-cover on top of the iframe (z-index: 10) 
-    // to capture clicks cleanly and prevent the iframe from pausing/stopping the stream!
     tile.innerHTML = `
       <div class="cam-click-cover" style="position: absolute; inset: 0; z-index: 10; cursor: pointer; background: transparent;"></div>
       <div class="cam-overlay" style="z-index: 5;">
@@ -248,10 +241,6 @@ function renderGrid(locationKey) {
     grid.appendChild(tile);
   });
 
-  // Update header dropdown
-  const locationSelect = document.getElementById("locationSelect");
-  if (locationSelect) locationSelect.value = locationKey;
-
   // Handle resize
   const onResize = () => applyGridLayout(grid, currentCameras.length);
   window.removeEventListener("resize", window._gridResizeHandler);
@@ -260,27 +249,6 @@ function renderGrid(locationKey) {
 
   // Start all streams
   currentCameras.forEach((cam) => startStream(cam.id));
-}
-
-// ── Show location picker ──
-
-function showLocationPicker() {
-  // Cleanup current streams
-  currentCameras.forEach((cam) => cleanup(cam.id));
-
-  currentLocation = null;
-  currentCameras = [];
-
-  const picker = document.getElementById("locationPicker");
-  const grid = document.getElementById("grid");
-  if (!picker || !grid) return;
-
-  grid.style.display = "none";
-  grid.innerHTML = "";
-  picker.style.display = "";
-
-  const locationSelect = document.getElementById("locationSelect");
-  if (locationSelect) locationSelect.value = "";
 }
 
 // ── Fullscreen ──
@@ -352,27 +320,13 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// ── Location card click handlers ──
+// ── Auto-initialize from data-location attribute ──
+// The server-rendered page sets data-location on .app-shell
 
-document.querySelectorAll(".location-card").forEach((card) => {
-  card.addEventListener("click", () => {
-    const locationKey = card.dataset.location;
-    if (locationKey && LOCATIONS[locationKey]) {
-      renderGrid(locationKey);
-    }
-  });
-});
-
-// ── Header location dropdown ──
-
-const locationSelect = document.getElementById("locationSelect");
-if (locationSelect) {
-  locationSelect.addEventListener("change", () => {
-    const value = locationSelect.value;
-    if (value && LOCATIONS[value]) {
-      renderGrid(value);
-    } else {
-      showLocationPicker();
-    }
-  });
+const appShell = document.querySelector(".app-shell[data-location]");
+if (appShell) {
+  const locationKey = appShell.dataset.location;
+  if (locationKey && LOCATIONS[locationKey]) {
+    renderGrid(locationKey);
+  }
 }
